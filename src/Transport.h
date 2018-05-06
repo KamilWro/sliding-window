@@ -16,20 +16,26 @@
 using namespace std;
 
 class Transport {
-    const uint32_t MAX_SEGMENT_SIZE = 1000;
+    const uint32_t MAX_WINDOW_SIZE = 1000;
     int sockfd;
-    int port;
+    uint32_t port;
     string ipAddr;
     struct sockaddr_in serverAddress;
 
-    deque<string> segments;
+    deque<string> window;
     const uint32_t senderWindowSize = 500;
 
     void removeSegments();
 
     void sendPackets(uint32_t bytesWrittenCount, uint32_t sizeFile);
 
-    void receivePackets(uint32_t bytesWrittenCount, uint32_t &bytesReceivedCount, uint32_t sizeFile);
+    bool isNotFullSegment(uint32_t start, uint32_t sizeFile);
+
+    uint32_t receivePackets(uint32_t bytesWrittenCount, uint32_t bytesReceivedCount, uint32_t sizeFile);
+
+    uint32_t extractSizeData(string data);
+
+    uint32_t extractStart(string data);
 
     bool isFittedToWindow(uint32_t start, uint32_t bytesWrittenCount);
 
@@ -39,11 +45,9 @@ class Transport {
 
     uint32_t writeToFile(OutputFile &outputFile);
 
-    bool isNotFullSegment(uint32_t start, uint32_t sizeFile);
-
 public:
 
-    Transport(int port, string ipAddr);
+    Transport(uint32_t port, string ipAddr);
 
     void download(string nameFile, uint32_t sizeFile);
 
