@@ -46,6 +46,8 @@ public:
     void download(string nameFile, uint32_t sizeFile);
 
     virtual ~Transport();
+
+    bool isNotFullSegment(uint32_t start, uint32_t sizeFile);
 };
 
 #endif

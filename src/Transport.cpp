@@ -49,9 +49,9 @@ void Transport::sendPackets(uint32_t bytesWrittenCount, uint32_t sizeFile) {
 
     for (auto it = segments.begin(); it != segments.end() && start < sizeFile; ++it, start += MAX_SEGMENT_SIZE) {
         if (*it == "") {
-            uint32_t sgmtSize = (sizeFile - start) < MAX_SEGMENT_SIZE ? sizeFile % MAX_SEGMENT_SIZE : MAX_SEGMENT_SIZE;
-
+            uint32_t sgmtSize = isNotFullSegment(start, sizeFile) ? sizeFile % MAX_SEGMENT_SIZE : MAX_SEGMENT_SIZE;
             string message = "GET " + to_string(start) + " " + to_string(sgmtSize) + "\n";
+
             sender.send(sockfd, serverAddress, message);
         }
     }
@@ -104,12 +104,15 @@ void Transport::receivePackets(uint32_t bytesWrittenCount, uint32_t &bytesReceiv
 
 bool Transport::isFittedToWindow(uint32_t start, uint32_t bytesWrittenCount) {
     return (start % MAX_SEGMENT_SIZE == 0) && bytesWrittenCount <= start &&
-           (start < bytesWrittenCount + segments.size() * MAX_SEGMENT_SIZE);
+           start < (bytesWrittenCount + segments.size() * MAX_SEGMENT_SIZE);
 }
 
 bool Transport::isCorrectSizeOfData(uint32_t start, uint32_t sizeData, string data, uint32_t sizeFile) {
-    return data.size() == sizeData && (sizeData == MAX_SEGMENT_SIZE ||
-                                       ((sizeFile % MAX_SEGMENT_SIZE != 0) && (sizeFile - start) < MAX_SEGMENT_SIZE));
+    return data.size() == sizeData && (sizeData == MAX_SEGMENT_SIZE || isNotFullSegment(start, sizeFile));
+}
+
+bool Transport::isNotFullSegment(uint32_t start, uint32_t sizeFile) {
+    return (sizeFile % MAX_SEGMENT_SIZE) != 0 && (sizeFile - start) < MAX_SEGMENT_SIZE;
 }
 
 uint32_t Transport::writeToFile(OutputFile &outputFile) {
