@@ -39,6 +39,8 @@ class Transport {
 
     uint32_t writeToFile(OutputFile &outputFile);
 
+    bool isNotFullSegment(uint32_t start, uint32_t sizeFile);
+
 public:
 
     Transport(int port, string ipAddr);
@@ -46,8 +48,6 @@ public:
     void download(string nameFile, uint32_t sizeFile);
 
     virtual ~Transport();
-
-    bool isNotFullSegment(uint32_t start, uint32_t sizeFile);
 };
 
 #endif
