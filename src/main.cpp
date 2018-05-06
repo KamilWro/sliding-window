@@ -13,9 +13,9 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
-    validate(argv[1], argv[3]);
-
     try {
+        validate(argv[1], argv[3]);
+
         uint32_t port = stoi(argv[1]);
         string fileName = string(argv[2]);
         uint32_t sizeFile = stoi(argv[3]);
