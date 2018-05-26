@@ -8,24 +8,21 @@
 #include <unistd.h>
 #include <iostream>
 #include <cstring>
-#include <deque>
-#include "OutputFile.h"
-#include "Sender.h"
+
 #include "Receiver.h"
+#include "Sockwrap.h"
+#include "Window.h"
 
 using namespace std;
 
 class Transport {
-    const uint32_t maxWindowSize = 1000;
+    const uint32_t maxDataLength = 1000;
     int sockfd;
     uint32_t port;
     string ipAddr;
     struct sockaddr_in serverAddress;
 
-    deque<string> window;
-    const uint32_t senderWindowSize = 500;
-
-    void removeSegments();
+    Window window;
 
     void sendPackets(uint32_t bytesWrittenCount, uint32_t sizeFile);
 
@@ -33,17 +30,13 @@ class Transport {
 
     uint32_t receivePackets(uint32_t bytesWrittenCount, uint32_t bytesReceivedCount, uint32_t sizeFile);
 
-    uint32_t extractSizeData(string data);
-
-    uint32_t extractStart(string data);
+    bool validatePacket(Packet packet, uint32_t bytesWrittenCount, uint32_t sizeFile);
 
     bool isFittedToWindow(uint32_t start, uint32_t bytesWrittenCount);
 
-    bool isCorrectSizeOfData(uint32_t start, uint32_t sizeData, string data, uint32_t sizeFile);
+    bool isCorrectDataLength(uint32_t start, uint32_t length, string data, uint32_t sizeFile);
 
     void printToConsole(uint32_t bytesReceivedCount, uint32_t sizeFile);
-
-    uint32_t writeToFile(OutputFile &outputFile);
 
 public:
 

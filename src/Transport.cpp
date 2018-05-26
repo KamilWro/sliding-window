@@ -1,12 +1,8 @@
 // Kamil Breczko (280 990)
 
 #include "Transport.h"
-#include "Sockwrap.h"
 
 Transport::Transport(uint32_t port, string ipAddr) : port(port), ipAddr(ipAddr) {
-    if (port > 0xFFFF)
-        throw invalid_argument("port must be between 0 and 65535 \n");
-
     sockfd = Socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
     bzero(&serverAddress, sizeof(serverAddress));
@@ -14,14 +10,11 @@ Transport::Transport(uint32_t port, string ipAddr) : port(port), ipAddr(ipAddr) 
     serverAddress.sin_port = htons(port);
 
     Inet_pton(AF_INET, ipAddr.c_str(), &serverAddress.sin_addr);
-
-    if (connect(sockfd, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0)
-        throw runtime_error(string("connect error: ") + strerror(errno) + " \n");
+    Connect(sockfd, &serverAddress, sizeof(serverAddress));
 }
 
 void Transport::download(string nameFile, uint32_t sizeFile) {
-    OutputFile outputFile(nameFile);
-    removeSegments();
+    OutputFile outputFile(move(nameFile));
 
     uint32_t bytesReceivedCount = 0;
     uint32_t bytesWrittenCount = 0;
@@ -29,74 +22,62 @@ void Transport::download(string nameFile, uint32_t sizeFile) {
     while (bytesWrittenCount < sizeFile) {
         sendPackets(bytesWrittenCount, sizeFile);
         bytesReceivedCount += receivePackets(bytesWrittenCount, bytesReceivedCount, sizeFile);
-        bytesWrittenCount += writeToFile(outputFile);
+        bytesWrittenCount += window.writeToFile(outputFile);
     }
 
     cout << "Received " << bytesWrittenCount << " bytes." << endl;
 }
 
-void Transport::removeSegments() {
-    window.clear();
-    window = deque<string>(maxWindowSize, "");
-}
 
 void Transport::sendPackets(uint32_t bytesWrittenCount, uint32_t sizeFile) {
     uint32_t start = bytesWrittenCount;
 
-    for (auto it = window.begin(); it != window.end() && start < sizeFile; ++it, start += maxWindowSize) {
-        if (*it == "") {
-            uint32_t sgmtSize = isNotFullSegment(start, sizeFile) ? sizeFile % maxWindowSize : maxWindowSize;
+    for (uint32_t i = 0; i < window.size() && start < sizeFile; i++, start += maxDataLength) {
+        if (window.isEmpty(i)) {
+            uint32_t sgmtSize = isNotFullSegment(start, sizeFile) ? sizeFile % maxDataLength : maxDataLength;
             string message = "GET " + to_string(start) + " " + to_string(sgmtSize) + "\n";
-            SendTo(sockfd, message.c_str(), message.length(), 0, (struct sockaddr *) &serverAddress,
-                   sizeof(serverAddress));
+            SendTo(sockfd, message.c_str(), message.length(), 0, &serverAddress, sizeof(serverAddress));
         }
     }
 }
 
+bool Transport::isNotFullSegment(uint32_t start, uint32_t sizeFile) {
+    return (sizeFile % maxDataLength) != 0 && (sizeFile - start) < maxDataLength;
+}
+
 uint32_t Transport::receivePackets(uint32_t bytesWrittenCount, uint32_t bytesReceivedCount, uint32_t sizeFile) {
-    uint32_t packets = 0;
+    const uint32_t maxBytesCount = bytesWrittenCount + WINDOW_SIZE * maxDataLength;
     uint32_t bytes = 0;
     Receiver receiver;
 
-    while (packets < senderWindowSize) {
+    while (bytesReceivedCount + bytes < maxBytesCount) {
         fd_set descriptors;
         FD_ZERO (&descriptors);
         FD_SET (sockfd, &descriptors);
 
-        struct timeval tv;
+        struct timeval tv{};
         tv.tv_sec = 0;
         tv.tv_usec = 200;
 
-        int ready = select(sockfd + 1, &descriptors, NULL, NULL, &tv);
-
-        if (ready < 0)
-            throw runtime_error("select error: waiting for the package in the socket has failed \n");
+        int ready = Select(sockfd + 1, &descriptors, nullptr, nullptr, &tv);
 
         if (ready == 0)
             break;
 
-        Packet packet = receiver.receivePacket(sockfd);
-        if (packet.ipAddr == ipAddr && packet.port == port) {
-            string data = packet.data;
-            data = data.substr(data.find('\n') + 1);
-            uint32_t start = 0, sizeData = 0;
+        Packet packet{};
 
-            try {
-                start = extractStart(packet.data);
-                sizeData = extractSizeData(packet.data);
-            } catch (const exception &e) {
-                cerr << "Invalid header was received" << endl;
-                continue;
-            }
+        try {
+            packet = receiver.receivePacket(sockfd);
+        } catch (const exception &e) {
+            cerr << "Invalid header was received" << endl;
+        }
 
-            if (isFittedToWindow(start, bytesWrittenCount) && isCorrectSizeOfData(start, sizeData, data, sizeFile)) {
-                uint32_t id = (start - bytesWrittenCount) / maxWindowSize;
-                if (window[id] == "") {
-                    bytes += sizeData;
-                    packets++;
-                    window[id] = data;
-                    printToConsole(bytesReceivedCount + bytes, sizeFile);
-                }
+        if (validatePacket(packet, bytesWrittenCount, sizeFile)) {
+            uint32_t id = (packet.start - bytesWrittenCount) / maxDataLength;
+            if (window.isEmpty(id)) {
+                bytes += packet.length;
+                window.setData(id, packet.data);
+                printToConsole(bytesReceivedCount + bytes, sizeFile);
             }
         }
     }
@@ -104,45 +85,18 @@ uint32_t Transport::receivePackets(uint32_t bytesWrittenCount, uint32_t bytesRec
     return bytes;
 }
 
-uint32_t Transport::extractStart(string data) {
-    data = data.substr(0, data.find('\n'));
-    data = data.substr(data.find(' ') + 1);
-    return stoi(data);
-}
-
-uint32_t Transport::extractSizeData(string data) {
-    data = data.substr(0, data.find('\n'));
-    data = data.substr(data.find(' ') + 1);
-    data = data.substr(data.find(' ') + 1);
-    return stoi(data);
+bool Transport::validatePacket(Packet packet, uint32_t bytesWrittenCount, uint32_t sizeFile) {
+    return packet.ipAddr == ipAddr && packet.port == port && isFittedToWindow(packet.start, bytesWrittenCount) &&
+           isCorrectDataLength(packet.start, packet.length, packet.data, sizeFile);
 }
 
 bool Transport::isFittedToWindow(uint32_t start, uint32_t bytesWrittenCount) {
-    return (start % maxWindowSize == 0) && bytesWrittenCount <= start &&
-           start < (bytesWrittenCount + window.size() * maxWindowSize);
+    return (start % maxDataLength == 0) && bytesWrittenCount <= start &&
+           start < (bytesWrittenCount + WINDOW_SIZE * maxDataLength);
 }
 
-bool Transport::isCorrectSizeOfData(uint32_t start, uint32_t sizeData, string data, uint32_t sizeFile) {
-    return data.size() == sizeData && (sizeData == maxWindowSize || isNotFullSegment(start, sizeFile));
-}
-
-bool Transport::isNotFullSegment(uint32_t start, uint32_t sizeFile) {
-    return (sizeFile % maxWindowSize) != 0 && (sizeFile - start) < maxWindowSize;
-}
-
-uint32_t Transport::writeToFile(OutputFile &outputFile) {
-    uint32_t bytes = 0;
-    while (window.front() != "") {
-        string segment = window.front();
-
-        outputFile.write(segment);
-        bytes += segment.size();
-
-        window.pop_front();
-        window.push_back("");
-    }
-
-    return bytes;
+bool Transport::isCorrectDataLength(uint32_t start, uint32_t length, string data, uint32_t sizeFile) {
+    return data.size() == length && (length == maxDataLength || isNotFullSegment(start, sizeFile));
 }
 
 void Transport::printToConsole(uint32_t bytesReceivedCount, uint32_t sizeFile) {
@@ -153,5 +107,5 @@ void Transport::printToConsole(uint32_t bytesReceivedCount, uint32_t sizeFile) {
 }
 
 Transport::~Transport() {
-    close(sockfd);
+    Close(sockfd);
 }

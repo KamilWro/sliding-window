@@ -18,7 +18,7 @@ int Socket(int family, int type, int protocol);
 
 size_t RecvFrom(int fd, void *ptr, size_t nbytes, int flags, struct sockaddr *src_addr, socklen_t *addrlen);
 
-void SendTo(int fd, const void *ptr, int nbytes, int flags, const struct sockaddr *dest_addr, socklen_t addrlen);
+void SendTo(int fd, const void *ptr, int nbytes, int flags, const struct sockaddr_in *dest_addr, socklen_t addrlen);
 
 void Close(int fd);
 
@@ -26,8 +26,8 @@ int Select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struc
 
 void Inet_ntop(int af, const void *src, char *dst, socklen_t size);
 
-void Setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
-
 void Inet_pton(int af, const char *src, void *dst);
+
+void Connect(int fd, const struct sockaddr_in *sa, socklen_t salen);
 
 #endif

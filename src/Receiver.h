@@ -16,6 +16,12 @@ class Receiver {
 
 public:
     Packet receivePacket(int sockfd);
+
+    uint32_t extractStart(string data);
+
+    uint32_t extractLength(string data);
+
+    string extractData(string data);
 };
 
 #endif
