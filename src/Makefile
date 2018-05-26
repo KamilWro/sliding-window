@@ -4,8 +4,8 @@ CXXFLAGS = -std=c++11 -Wall -Wextra
 
 CXX = g++
 
-main : main.o OutputFile.o Packet.h Receiver.o Sender.o Transport.o
-	$(CXX) $(CXXFLAGS) -o transport main.o OutputFile.o Receiver.o Sender.o Transport.o
+main : main.o OutputFile.o Packet.h Receiver.o Sender.o Transport.o Sockwrap.o
+	$(CXX) $(CXXFLAGS) -o transport main.o OutputFile.o Receiver.o Sender.o Transport.o Sockwrap.o
 
 main.o : main.cpp
 	$(CXX) -c $(CXXFLAGS) main.cpp -o  main.o
@@ -21,6 +21,9 @@ Sender.o : Sender.cpp Sender.h
 
 OutputFile.o : OutputFile.cpp OutputFile.h
 	$(CXX) -c $(CXXFLAGS) OutputFile.cpp -o  OutputFile.o
+
+Sockwrap.o : Sockwrap.cpp Sockwrap.h
+	$(CXX) -c $(CXXFLAGS) Sockwrap.cpp -o  Sockwrap.o
 
 clean:
 	rm -rf *.o

@@ -12,10 +12,10 @@
 using namespace std;
 
 class Receiver {
-    Packet readBuffor(sockaddr_in sender, char *buffer, ssize_t size);
+    Packet readBuffer(sockaddr_in sender, char *buffer, size_t size);
 
 public:
-    Packet receive(int sockfd);
+    Packet receivePacket(int sockfd);
 };
 
 #endif

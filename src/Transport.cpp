@@ -1,22 +1,19 @@
 // Kamil Breczko (280 990)
 
 #include "Transport.h"
+#include "Sockwrap.h"
 
 Transport::Transport(uint32_t port, string ipAddr) : port(port), ipAddr(ipAddr) {
     if (port > 0xFFFF)
         throw invalid_argument("port must be between 0 and 65535 \n");
 
-    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sockfd < 0)
-        throw runtime_error(string("socket error: ") + strerror(errno) + " \n");
+    sockfd = Socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
     bzero(&serverAddress, sizeof(serverAddress));
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(port);
 
-    int address = inet_pton(AF_INET, ipAddr.c_str(), &serverAddress.sin_addr);
-    if (address == 0)
-        throw invalid_argument("error: incorrect IPv4 address \n");
+    Inet_pton(AF_INET, ipAddr.c_str(), &serverAddress.sin_addr);
 
     if (connect(sockfd, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0)
         throw runtime_error(string("connect error: ") + strerror(errno) + " \n");
@@ -40,19 +37,18 @@ void Transport::download(string nameFile, uint32_t sizeFile) {
 
 void Transport::removeSegments() {
     window.clear();
-    window = deque<string>(MAX_WINDOW_SIZE, "");
+    window = deque<string>(maxWindowSize, "");
 }
 
 void Transport::sendPackets(uint32_t bytesWrittenCount, uint32_t sizeFile) {
-    Sender sender;
     uint32_t start = bytesWrittenCount;
 
-    for (auto it = window.begin(); it != window.end() && start < sizeFile; ++it, start += MAX_WINDOW_SIZE) {
+    for (auto it = window.begin(); it != window.end() && start < sizeFile; ++it, start += maxWindowSize) {
         if (*it == "") {
-            uint32_t sgmtSize = isNotFullSegment(start, sizeFile) ? sizeFile % MAX_WINDOW_SIZE : MAX_WINDOW_SIZE;
+            uint32_t sgmtSize = isNotFullSegment(start, sizeFile) ? sizeFile % maxWindowSize : maxWindowSize;
             string message = "GET " + to_string(start) + " " + to_string(sgmtSize) + "\n";
-
-            sender.send(sockfd, serverAddress, message);
+            SendTo(sockfd, message.c_str(), message.length(), 0, (struct sockaddr *) &serverAddress,
+                   sizeof(serverAddress));
         }
     }
 }
@@ -79,7 +75,7 @@ uint32_t Transport::receivePackets(uint32_t bytesWrittenCount, uint32_t bytesRec
         if (ready == 0)
             break;
 
-        Packet packet = receiver.receive(sockfd);
+        Packet packet = receiver.receivePacket(sockfd);
         if (packet.ipAddr == ipAddr && packet.port == port) {
             string data = packet.data;
             data = data.substr(data.find('\n') + 1);
@@ -94,7 +90,7 @@ uint32_t Transport::receivePackets(uint32_t bytesWrittenCount, uint32_t bytesRec
             }
 
             if (isFittedToWindow(start, bytesWrittenCount) && isCorrectSizeOfData(start, sizeData, data, sizeFile)) {
-                uint32_t id = (start - bytesWrittenCount) / MAX_WINDOW_SIZE;
+                uint32_t id = (start - bytesWrittenCount) / maxWindowSize;
                 if (window[id] == "") {
                     bytes += sizeData;
                     packets++;
@@ -122,16 +118,16 @@ uint32_t Transport::extractSizeData(string data) {
 }
 
 bool Transport::isFittedToWindow(uint32_t start, uint32_t bytesWrittenCount) {
-    return (start % MAX_WINDOW_SIZE == 0) && bytesWrittenCount <= start &&
-           start < (bytesWrittenCount + window.size() * MAX_WINDOW_SIZE);
+    return (start % maxWindowSize == 0) && bytesWrittenCount <= start &&
+           start < (bytesWrittenCount + window.size() * maxWindowSize);
 }
 
 bool Transport::isCorrectSizeOfData(uint32_t start, uint32_t sizeData, string data, uint32_t sizeFile) {
-    return data.size() == sizeData && (sizeData == MAX_WINDOW_SIZE || isNotFullSegment(start, sizeFile));
+    return data.size() == sizeData && (sizeData == maxWindowSize || isNotFullSegment(start, sizeFile));
 }
 
 bool Transport::isNotFullSegment(uint32_t start, uint32_t sizeFile) {
-    return (sizeFile % MAX_WINDOW_SIZE) != 0 && (sizeFile - start) < MAX_WINDOW_SIZE;
+    return (sizeFile % maxWindowSize) != 0 && (sizeFile - start) < maxWindowSize;
 }
 
 uint32_t Transport::writeToFile(OutputFile &outputFile) {

@@ -16,7 +16,7 @@
 using namespace std;
 
 class Transport {
-    const uint32_t MAX_WINDOW_SIZE = 1000;
+    const uint32_t maxWindowSize = 1000;
     int sockfd;
     uint32_t port;
     string ipAddr;
@@ -51,7 +51,7 @@ public:
 
     void download(string nameFile, uint32_t sizeFile);
 
-    virtual ~Transport();
+    ~Transport();
 };
 
 #endif

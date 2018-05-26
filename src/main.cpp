@@ -3,6 +3,9 @@
 #include <iostream>
 #include "Transport.h"
 
+#define MAX_PORT 65535
+#define MIN_PORT 0
+
 using namespace std;
 
 void validate(const char *port_s, const char *sizeFile_s);
@@ -35,7 +38,7 @@ void validate(const char *port_s, const char *sizeFile_s) {
         int port = stoi(port_s);
         int sizeFile = stoi(sizeFile_s);
 
-        if (port < 0 || port > 0xFFFF)
+        if (port < MIN_PORT || port > MAX_PORT)
             throw invalid_argument("Port must be between 0 and 65535 \n");
 
         if (sizeFile < 0 || sizeFile > 10001000)
